@@ -11,13 +11,14 @@
 # Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
-
+from typing import List, Tuple
 from util import manhattanDistance
 from game import Directions
-import random, util
-
+import random
+import util
 from game import Agent
 from pacman import GameState
+
 
 class ReflexAgent(Agent):
     """
@@ -67,15 +68,64 @@ class ReflexAgent(Agent):
         Print out these variables to see what you're getting, then combine them
         to create a masterful evaluation function.
         """
-        # Useful information you can extract from a GameState (pacman.py)
-        successorGameState = currentGameState.generatePacmanSuccessor(action)
-        newPos = successorGameState.getPacmanPosition()
-        newFood = successorGameState.getFood()
-        newGhostStates = successorGameState.getGhostStates()
-        newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
+        # Previous state data:
+        previous_food = currentGameState.getFood().asList()
+        # New state:
+        successor_game_state = currentGameState.generatePacmanSuccessor(action)
+        # Food:
+        new_position = successor_game_state.getPacmanPosition()
+        new_food = successor_game_state.getFood().asList()
+        # Ghosts:
+        new_ghost_states = successor_game_state.getGhostStates()
+        new_ghost_positions = successor_game_state.getGhostPositions()
+        new_scared_timed = (ghostState.scaredTimer for ghostState in new_ghost_states)
+        new_ghost_positions_with_timers = zip(new_ghost_positions, new_scared_timed)
 
-        "*** YOUR CODE HERE ***"
-        return successorGameState.getScore()
+        # Scores:
+        food_score = self.get_food_score(new_position, new_food)
+        # It's possible we ate a pellet in the action: add 1 to the food_score
+        if self.ate_pellet(previous_food, new_food):
+            food_score += 1
+        ghost_score = self.get_ghost_score(new_position, new_ghost_positions_with_timers)
+
+        return food_score + ghost_score
+
+    @staticmethod
+    def get_food_score(pacman_position, food_locations):
+        """
+        Calculates a value for how good pac-man's position is as opposed to the food locations. Returns the sum of the
+        inverse of 2 to the power of the manhattan distances of each pellet to pac-man's position.
+        """
+        food_distance = (manhattanDistance(pacman_position, food_location) for food_location in food_locations)
+        return inverse_exp_sum(food_distance)
+
+    @staticmethod
+    def get_ghost_score(pacman_position, ghost_positions_with_timers):
+        score = 0.0_0  # hmm... What could this mean?
+
+        for ghost_position, scared_value in ghost_positions_with_timers:
+            distance = manhattanDistance(pacman_position, ghost_position)
+
+            # We never want to move next to or on a ghost:
+            if distance == 1 or distance == 0:
+                return -float("inf")
+
+            # We'd rather stay a good distance from the ghost, but shouldn't care as long as we're far enough away:
+            if distance == 2:
+                score -= 1
+            elif distance == 3:
+                score -= 0.5
+
+        return score
+
+    @staticmethod
+    def ate_pellet(previous_food, new_food):
+        return len(previous_food) != len(new_food)
+
+
+def inverse_exp_sum(iterable):
+    return sum(2**(-x) for x in iterable)
+
 
 def scoreEvaluationFunction(currentGameState: GameState):
     """
@@ -86,6 +136,7 @@ def scoreEvaluationFunction(currentGameState: GameState):
     (not reflex agents).
     """
     return currentGameState.getScore()
+
 
 class MultiAgentSearchAgent(Agent):
     """
@@ -106,6 +157,7 @@ class MultiAgentSearchAgent(Agent):
         self.index = 0 # Pacman is always agent index 0
         self.evaluationFunction = util.lookup(evalFn, globals())
         self.depth = int(depth)
+
 
 class MinimaxAgent(MultiAgentSearchAgent):
     """
@@ -138,6 +190,7 @@ class MinimaxAgent(MultiAgentSearchAgent):
         "*** YOUR CODE HERE ***"
         util.raiseNotDefined()
 
+
 class AlphaBetaAgent(MultiAgentSearchAgent):
     """
     Your minimax agent with alpha-beta pruning (question 3)
@@ -149,6 +202,7 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         """
         "*** YOUR CODE HERE ***"
         util.raiseNotDefined()
+
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
     """
@@ -165,6 +219,7 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         "*** YOUR CODE HERE ***"
         util.raiseNotDefined()
 
+
 def betterEvaluationFunction(currentGameState: GameState):
     """
     Your extreme ghost-hunting, pellet-nabbing, food-gobbling, unstoppable
@@ -174,6 +229,7 @@ def betterEvaluationFunction(currentGameState: GameState):
     """
     "*** YOUR CODE HERE ***"
     util.raiseNotDefined()
+
 
 # Abbreviation
 better = betterEvaluationFunction
