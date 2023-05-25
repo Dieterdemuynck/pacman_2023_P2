@@ -11,7 +11,6 @@
 # Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
-from typing import List, Tuple
 from util import manhattanDistance
 from game import Directions
 import random
@@ -153,8 +152,10 @@ class MultiAgentSearchAgent(Agent):
     is another abstract class.
     """
 
+    PACMAN_INDEX = 0
+
     def __init__(self, evalFn = 'scoreEvaluationFunction', depth = '2'):
-        self.index = 0 # Pacman is always agent index 0
+        self.index = 0  # Pacman is always agent index 0
         self.evaluationFunction = util.lookup(evalFn, globals())
         self.depth = int(depth)
 
@@ -187,8 +188,46 @@ class MinimaxAgent(MultiAgentSearchAgent):
         gameState.isLose():
         Returns whether or not the game state is a losing state
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        max_evaluation = -float("inf")
+        best_action = Directions.STOP
+
+        print(self.depth)
+        for action in gameState.getLegalActions(self.PACMAN_INDEX):
+            new_state = gameState.generateSuccessor(self.PACMAN_INDEX, action)
+            new_evaluation = self.minimax(new_state, 0, self.PACMAN_INDEX + 1)
+
+            if new_evaluation >= max_evaluation:
+                max_evaluation = new_evaluation
+                best_action = action
+
+        return best_action
+
+    def minimax(self, state: GameState, depth, agent):
+        if agent >= state.getNumAgents():
+            # All ghosts have been cycled through
+            agent = self.PACMAN_INDEX
+            depth += 1  # We are now in a deeper level
+
+        if state.isLose() or state.isWin() or self._is_deepest_layer(state, depth, agent):
+            return self.evaluationFunction(state)
+
+        if agent == self.PACMAN_INDEX:
+            legal_actions = (action for action in state.getLegalActions(self.PACMAN_INDEX))
+            successor_states = (state.generateSuccessor(self.PACMAN_INDEX, action) for action in legal_actions)
+
+            return max(self.minimax(successor, depth, agent + 1) for successor in successor_states)
+
+        else:  # else statement for clarity
+            legal_actions = (action for action in state.getLegalActions(agent))
+            successor_states = (state.generateSuccessor(agent, action) for action in legal_actions)
+
+            return min(self.minimax(successor, depth, agent + 1) for successor in successor_states)
+
+    def _is_deepest_layer(self, state: GameState, depth, agent):
+        # In an attempt to bugfix, I tried this:
+        # return depth == self.depth-1 and agent == state.getNumAgents()-1
+        # Turns out the bug was not in the minimax method, but rather in the getAuction method.
+        return depth == self.depth
 
 
 class AlphaBetaAgent(MultiAgentSearchAgent):
