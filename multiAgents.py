@@ -397,13 +397,17 @@ def betterEvaluationFunction(currentGameState: GameState):
 
     DESCRIPTION: Before I mention what I've done, let me mention that I've tried a few things as you can see in the
                  code, and ended up having to settle for this, as through trial and error this is the highest I could
-                 get the score to go.
+                 get the score to go. All functions and classes that go unused have been marked with [UNUSED] in their
+                 documentation.
 
-    First of all, we check the trivial conditions, and give a high/low score to each. Since it is generally
-    easier for Pac-Man to lose, the low score for losing is less punishing than the high score for winning is
-    rewarding.
-    Next, we track all locations, and then calculate the weight of each value for the evaluation. First, the shortest
-    distance to a pellet is calculated using a reciprocal weight function.
+                 First of all, we check the trivial conditions, and give a high/low score to each. Since it is generally
+                 easier for Pac-Man to lose, the low score for losing is less punishing than the high score for winning
+                 is rewarding.
+                 Next, we track all locations, and then calculate the weight of each value for the evaluation. First,
+                 the shortest distance to a pellet is calculated, and the inverse is taken. We also check the shortest
+                 distance to a ghost, and set the weight high if the ghost is getting too close. We also track the
+                 score calculated by the game itself.
+                 We then compute a linear combination of these weights and values, and return these as our evaluation.
 
     """
 
@@ -412,9 +416,6 @@ def betterEvaluationFunction(currentGameState: GameState):
         return 1000000
     if currentGameState.isLose():
         return -10000
-
-    # Relevant weight functions
-    pellet_weight_function = reciprocal()
 
     # locations of relevant agents/pellets
     food_locations = tuple(currentGameState.getFood().asList())
@@ -533,6 +534,7 @@ def summed_distance(start_node: tuple, goal_nodes: tuple, *, weight_function=man
 
 def reciprocal(distance_function=manhattanDistance, *, unit_distance=1, power: int = 1, if_zero=1):
     """
+    [UNUSED]
     Returns a new function, which is an updated version of the passed in distance function. This new distance function
     returns the reciprocal of the return value of the original distance function, to some power (default=1). This value
     is then also multiplied, causing the unit distance (originally 1) to be raised/lowered to a new value (default=10).
