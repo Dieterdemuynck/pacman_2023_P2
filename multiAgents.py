@@ -18,6 +18,7 @@ import util
 from game import Agent
 from pacman import GameState
 from dataclasses import dataclass
+from functools import lru_cache
 
 
 class ReflexAgent(Agent):
@@ -208,26 +209,22 @@ class MinimaxAgent(MultiAgentSearchAgent):
             agent = self.PACMAN_INDEX
             depth += 1  # We are now in a deeper level
 
-        if state.isLose() or state.isWin() or self._is_deepest_layer(state, depth, agent):
+        if state.isLose() or state.isWin() or depth == self.depth:
             return self.evaluationFunction(state)
 
         if agent == self.PACMAN_INDEX:
             legal_actions = (action for action in state.getLegalActions(self.PACMAN_INDEX))
             successor_states = (state.generateSuccessor(self.PACMAN_INDEX, action) for action in legal_actions)
+            evaluations = (self.minimax(successor, depth, agent + 1) for successor in successor_states)
 
-            return max(self.minimax(successor, depth, agent + 1) for successor in successor_states)
+            return max(evaluations, default=-float("inf"))
 
         else:  # else statement for clarity
             legal_actions = (action for action in state.getLegalActions(agent))
             successor_states = (state.generateSuccessor(agent, action) for action in legal_actions)
+            evaluations = (self.minimax(successor, depth, agent + 1) for successor in successor_states)
 
-            return min(self.minimax(successor, depth, agent + 1) for successor in successor_states)
-
-    def _is_deepest_layer(self, state: GameState, depth, agent):
-        # In an attempt to bugfix, I tried this:
-        # return depth == self.depth-1 and agent == state.getNumAgents()-1
-        # Turns out the bug was not in the minimax method, but rather in the getAuction method.
-        return depth == self.depth
+            return min(evaluations, default=float("inf"))
 
 
 class AlphaBetaAgent(MultiAgentSearchAgent):
@@ -365,7 +362,7 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         max_value_actions = (ActionNode(self.expectimax(successor, depth, agent + 1).evaluation,
                                         action) for successor, action in successor_states_and_actions)
 
-        return max(max_value_actions, key=lambda x: x.evaluation)
+        return max(max_value_actions, default=ActionNode(0, Directions.STOP), key=lambda x: x.evaluation)
 
     def expected_node(self, state: GameState, depth: int, agent: int, *, chance_function=_uniform_chance_of_action):
         """
@@ -398,10 +395,156 @@ def betterEvaluationFunction(currentGameState: GameState):
     Your extreme ghost-hunting, pellet-nabbing, food-gobbling, unstoppable
     evaluation function (question 5).
 
-    DESCRIPTION: <write something here so we know what you did>
+    DESCRIPTION: Before I mention what I've done, let me mention that I've tried a few things as you can see in the
+                 code, and ended up having to settle for this, as through trial and error this is the highest I could
+                 get the score to go.
+
+    First of all, we check the trivial conditions, and give a high/low score to each. Since it is generally
+    easier for Pac-Man to lose, the low score for losing is less punishing than the high score for winning is
+    rewarding.
+    Next, we track all locations, and then calculate the weight of each value for the evaluation. First, the shortest
+    distance to a pellet is calculated using a reciprocal weight function.
+
     """
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+
+    # Trivial conditions: winning should be prioritised at all costs, losing avoided at all costs
+    if currentGameState.isWin():
+        return 1000000
+    if currentGameState.isLose():
+        return -10000
+
+    # Relevant weight functions
+    pellet_weight_function = reciprocal()
+
+    # locations of relevant agents/pellets
+    food_locations = tuple(currentGameState.getFood().asList())
+    pacman_location = currentGameState.getPacmanPosition()
+    ghost_locations = tuple(currentGameState.getGhostPositions())
+
+    # Pellet weights
+    pellet_distance_weight = 1 / shortest_distance(pacman_location, food_locations)
+
+    # Ghost weight
+    ghost_distance_weight = 0
+    ghost_distance = shortest_distance(pacman_location, ghost_locations)
+    if ghost_distance < 2:
+        ghost_distance_weight = 1000
+
+    evaluated_score = currentGameState.getScore()
+
+    return ghost_distance_weight + pellet_distance_weight * 30 + evaluated_score * 200
+
+
+"""
+[UNUSED]
+STUDENT NOTE: I'm reusing my code from P1, where I constructed a minimal spanning tree between the food pellets.
+Side note: I've noticed my original heuristic in P1 was not actually consistent, and I believe I could fix it by
+    constructing an MST between the food pellets (using manhattanDistance preferably) and then find the shortest
+    (manhattan-) distance from Pac-Man to the nearest food pellet. It's too late for this though, but I did want
+    you to know.
+"""
+
+
+class Graph:
+    """
+    [UNUSED]
+    A Graph which takes in the nodes, and an optional weight function. An adjacency matrix is created, linking every
+    node to every other node, and adds a weight to that (undirected) edge equal to the weigh function applied to both
+    nodes.
+
+    This Graph class also implements prim's algorithms to convert the graph to a minimal spanning tree of the graph. It
+    also implements a method to get the total weight of this (undirected) graph
+
+    This class and relative functions are based on the code at:
+    https://stackabuse.com/courses/graphs-in-python-theory-and-implementation/lessons/minimum-spanning-trees-prims-algorithm/
+    """
+    def __init__(self, nodes, weight_function=manhattanDistance):
+        self.node_count = len(nodes)
+
+        # Construct the adjacency matrix
+        self.adjacency_matrix = [[0 for _ in range(self.node_count)] for _ in range(self.node_count)]
+
+        for i, node1 in enumerate(nodes):
+            for j, node2 in enumerate(nodes):
+                self.adjacency_matrix[i][j] = weight_function(node1, node2)
+
+    def apply_prim(self):
+        """Applies prim's algorithm to this graph, and updates the adjacency matrix accordingly."""
+        inf = float("inf")
+        selected_nodes = [False for _ in range(self.node_count)]
+
+        result = [[0 for _ in range(self.node_count)] for _ in range(self.node_count)]
+        start, end = 0, 0  # start and end indicate the index of the starting and ending node of a new edge
+
+        # oof, look at this nesting... disgusting.
+        while False in selected_nodes:
+            cheapest = inf
+
+            for i in range(self.node_count):
+                if selected_nodes[i]:
+                    for j in range(self.node_count):
+                        if not selected_nodes[j] and 0 < self.adjacency_matrix[i][j] < cheapest:
+                            cheapest = self.adjacency_matrix[i][j]
+                            start, end = i, j
+
+            selected_nodes[end] = True
+            result[start][end] = cheapest
+            result[end][start] = result[start][end]
+
+            # Technically irrelevant, adding for completeness
+            # I'd also think this could break the algorithm, since end never updates if this statement is true...?
+            if cheapest == inf:
+                result[start][end] = 0
+
+        self.adjacency_matrix = result
+
+    def get_total_weight(self):
+        return sum(sum(self.adjacency_matrix[i]) for i in range(self.node_count)) / 2
+
+
+@lru_cache(maxsize=256)  # caching last few pellet configurations. Why repeat the same work?
+def minimal_spanning_tree_weight(nodes: tuple, weight_function=manhattanDistance):
+    """
+    [UNUSED]
+    Constructs a minimal spanning tree (MST) between the given nodes, with the weight function used to create the
+    weights of the edges between each pair of nodes. Lastly, returns the total weight of this MST.
+    """
+    graph = Graph(nodes, weight_function=weight_function)
+    graph.apply_prim()
+    return graph.get_total_weight()
+
+
+def shortest_distance(start_node: tuple, goal_nodes: tuple, *, weight_function=manhattanDistance):
+    """
+    Returns the shortest distance from a start node (e.g. Pac-Man) to any goal node (e.g. the closest pellet), with the
+    distance computed using the weight function.
+    """
+    return min(weight_function(start_node, node) for node in goal_nodes)
+
+
+def summed_distance(start_node: tuple, goal_nodes: tuple, *, weight_function=manhattanDistance):
+    """
+    [UNUSED]
+    Returns the sum of the distances from a start node (e.g. Pac-Man) to each goal node (e.g. the closest pellet), with
+    the distance computed using the weight function.
+    """
+    return sum(weight_function(start_node, node) for node in goal_nodes)
+
+
+def reciprocal(distance_function=manhattanDistance, *, unit_distance=1, power: int = 1, if_zero=1):
+    """
+    Returns a new function, which is an updated version of the passed in distance function. This new distance function
+    returns the reciprocal of the return value of the original distance function, to some power (default=1). This value
+    is then also multiplied, causing the unit distance (originally 1) to be raised/lowered to a new value (default=10).
+    If the original distance function were to return 0, to prevent a divide by 0 exception, the if_zero value
+    (default=1) is returned instead.
+    """
+    def diminishing_distance_function(*args, **kwargs):  # I love wrapper functions.
+        distance = distance_function(*args, **kwargs)
+        if distance == 0:
+            return if_zero
+        return unit_distance * distance**(-power)
+    return diminishing_distance_function
 
 
 # Abbreviation
