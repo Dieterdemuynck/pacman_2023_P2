@@ -190,8 +190,7 @@ class MinimaxAgent(MultiAgentSearchAgent):
         """
         max_evaluation = -float("inf")
         best_action = Directions.STOP
-
-        print(self.depth)
+        
         for action in gameState.getLegalActions(self.PACMAN_INDEX):
             new_state = gameState.generateSuccessor(self.PACMAN_INDEX, action)
             new_evaluation = self.minimax(new_state, 0, self.PACMAN_INDEX + 1)
