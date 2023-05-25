@@ -232,14 +232,74 @@ class MinimaxAgent(MultiAgentSearchAgent):
 class AlphaBetaAgent(MultiAgentSearchAgent):
     """
     Your minimax agent with alpha-beta pruning (question 3)
+
+    STUDENT NOTE: code is largely based on pseudo code in this video:
+    https://youtu.be/l-hh51ncgDI
+    technically I don't need to add this, but I felt like it. It's a decent video.
     """
 
     def getAction(self, gameState: GameState):
         """
         Returns the minimax action using self.depth and self.evaluationFunction
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        oo = float("inf")  # Note: oo stands for infinity (it slightly resembles the infinity symbol)
+        alpha = -oo
+        beta = +oo
+
+        max_evaluation = -float("inf")
+        best_action = Directions.STOP
+
+        for action in gameState.getLegalActions(self.PACMAN_INDEX):
+            new_state = gameState.generateSuccessor(self.PACMAN_INDEX, action)
+            new_evaluation = self.minimax(new_state, 0, self.PACMAN_INDEX + 1, alpha, beta)
+
+            if new_evaluation >= max_evaluation:
+                max_evaluation = new_evaluation
+                best_action = action
+
+            alpha = max(new_evaluation, alpha)
+            if beta < alpha:
+                # This is where I start thinking there should definitely be a more efficient way to do write this...
+                break
+
+        return best_action
+
+    def minimax(self, state: GameState, depth, agent, alpha, beta):
+        if agent >= state.getNumAgents():
+            # All ghosts have been cycled through
+            agent = self.PACMAN_INDEX
+            depth += 1  # We are now in a deeper level
+
+        if state.isLose() or state.isWin() or self.depth == depth:
+            return self.evaluationFunction(state)
+
+        if agent == self.PACMAN_INDEX:
+            legal_actions = (action for action in state.getLegalActions(self.PACMAN_INDEX))
+            successor_states = (state.generateSuccessor(self.PACMAN_INDEX, action) for action in legal_actions)
+
+            max_evaluation = -float("inf")
+            for successor in successor_states:
+                evaluation = self.minimax(successor, depth, agent + 1, alpha, beta)
+                max_evaluation = max(max_evaluation, evaluation)
+                alpha = max(alpha, evaluation)
+                if beta < alpha:
+                    break
+
+            return max_evaluation
+
+        else:  # I hope you don't have phasmophobia! Because we're gonna talk GHOSTS!
+            legal_actions = (action for action in state.getLegalActions(agent))
+            successor_states = (state.generateSuccessor(agent, action) for action in legal_actions)
+
+            min_evaluation = float("inf")
+            for successor in successor_states:
+                evaluation = self.minimax(successor, depth, agent + 1, alpha, beta)
+                min_evaluation = min(min_evaluation, evaluation)
+                beta = min(beta, evaluation)
+                if beta < alpha:
+                    break
+
+            return min_evaluation
 
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
