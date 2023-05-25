@@ -17,6 +17,7 @@ import random
 import util
 from game import Agent
 from pacman import GameState
+from dataclasses import dataclass
 
 
 class ReflexAgent(Agent):
@@ -302,6 +303,25 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
             return min_evaluation
 
 
+@dataclass(frozen=True)
+class ActionNode:
+    """
+    the only reason for this class is to not have to repeat any logic or code in the getAction method.
+    Could've (and should've) used this before, and made expectimax the exception to not use it.
+    We all make mistakes in life.
+    """
+    evaluation: float
+    action: str
+
+
+def _uniform_chance_of_action(state: GameState, agent: int, action: str):
+    legal_action_count = len(state.getLegalActions(agent))
+    if action in state.getLegalActions(agent):
+        # I don't understand the problem with truncation? / is for division (to float), // for integer division
+        return 1/legal_action_count
+    return 0
+
+
 class ExpectimaxAgent(MultiAgentSearchAgent):
     """
       Your expectimax agent (question 4)
@@ -314,8 +334,63 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         All ghosts should be modeled as choosing uniformly at random from their
         legal moves.
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return self.expectimax(gameState, 0, self.PACMAN_INDEX).action  # all this code just to get to put .action here
+
+    def expectimax(self, state: GameState, depth: int, agent: int, *, chance_function=_uniform_chance_of_action)\
+            -> ActionNode:
+        """
+        Note that this function functions differently from minimax. Instead of simply returning the value, we also
+        return the action for this node. Both values are returned using an ActionNode object.
+        """
+        if agent >= state.getNumAgents():
+            # All ghosts have been cycled through
+            agent = self.PACMAN_INDEX
+            depth += 1  # We are now in a deeper level
+
+        if state.isLose() or state.isWin() or self.depth == depth:
+            return ActionNode(self.evaluationFunction(state), Directions.STOP)
+
+        if agent == self.PACMAN_INDEX:
+            return self.max_node(state, depth, agent)
+
+        else:  # GHOSTS!! AAH!!! THEY'RE CHASING ME!!!1!
+            return self.expected_node(state, depth, agent, chance_function=chance_function)
+
+    def max_node(self, state: GameState, depth: int, agent: int):
+        """
+        Returns the ActionNode with the largest value
+        """
+        legal_actions = (action for action in state.getLegalActions(agent))
+        successor_states_and_actions = ((state.generateSuccessor(agent, action), action) for action in legal_actions)
+        max_value_actions = (ActionNode(self.expectimax(successor, depth, agent + 1).evaluation,
+                                        action) for successor, action in successor_states_and_actions)
+
+        return max(max_value_actions, key=lambda x: x.evaluation)
+
+    def expected_node(self, state: GameState, depth: int, agent: int, *, chance_function=_uniform_chance_of_action):
+        """
+        Returns the ActionNode with an expected value per the chance_function. The action given is the most likely
+        action.
+
+        STUDENT NOTE: woops. I forgot that the chance-node can't just return one action...
+        Workaround: return the most likely one.
+        Why do things the easy way when things can be done the hard way too?
+        """
+        legal_actions = (action for action in state.getLegalActions(agent))
+        successor_states_and_actions = ((state.generateSuccessor(agent, action), action) for action in legal_actions)
+
+        most_likely_action = Directions.STOP
+        highest_probability = 0
+        expected_value = 0
+        for successor, action in successor_states_and_actions:
+            probability = chance_function(state, agent, action)
+            expected_value += probability * self.expectimax(successor, depth, agent + 1).evaluation
+
+            if probability > highest_probability:
+                highest_probability = probability
+                most_likely_action = action
+
+        return ActionNode(expected_value, most_likely_action)
 
 
 def betterEvaluationFunction(currentGameState: GameState):
